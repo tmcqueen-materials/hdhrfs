@@ -1,0 +1,18 @@
+--- minidlna-1.1.0.orig/metadata.h	2012-07-27 21:17:30.000000000 -0400
++++ minidlna-1.1.0/metadata.h	2013-10-22 13:43:47.000000000 -0400
+@@ -89,12 +89,12 @@
+ GetFolderMetadata(const char *name, const char *path, const char *artist, const char *genre, int64_t album_art);
+ 
+ int64_t
+-GetAudioMetadata(const char *path, char *name);
++GetAudioMetadata(const char *path, char *name, int32_t is_live);
+ 
+ int64_t
+-GetImageMetadata(const char *path, char *name);
++GetImageMetadata(const char *path, char *name, int32_t is_live);
+ 
+ int64_t
+-GetVideoMetadata(const char *path, char *name);
++GetVideoMetadata(const char *path, char *name, int32_t is_live);
+ 
+ #endif

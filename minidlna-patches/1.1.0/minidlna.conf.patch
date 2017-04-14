@@ -1,0 +1,18 @@
+--- minidlna-1.1.0.orig/minidlna.conf	2012-10-03 03:26:00.000000000 -0400
++++ minidlna-1.1.0/minidlna.conf	2013-10-22 09:22:06.000000000 -0400
+@@ -14,9 +14,14 @@
+ #   + "A" for audio  (eg. media_dir=A,/home/jmaggard/Music)
+ #   + "V" for video  (eg. media_dir=V,/home/jmaggard/Videos)
+ #   + "P" for images (eg. media_dir=P,/home/jmaggard/Pictures)
+-#   + "PV" for pictures and video (eg. media_dir=AV,/home/jmaggard/digital_camera)
++#   + "PV" for pictures and video (eg. media_dir=PV,/home/jmaggard/digital_camera)
+ media_dir=/opt
+ 
++# live_media_dir works the same way as media_dir, but is intended for live streams (webcams, etc)
++# It tells minidlna to disable seeking and all other functionality that relies on a static file size
++# It should *not* be a subdirectory of any media_dir with the same content type
++#live_media_dir=/opt2/live
++
+ # set this if you want to customize the name that shows up on your clients
+ #friendly_name=My DLNA Server
+ 

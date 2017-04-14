@@ -1,0 +1,32 @@
+--- minidlna-1.1.0.orig/Makefile.am	2013-03-18 01:37:45.000000000 -0400
++++ minidlna-1.1.0/Makefile.am	2013-10-22 09:23:08.000000000 -0400
+@@ -2,9 +2,9 @@
+ 
+ SUBDIRS=po
+ 
+-sbin_PROGRAMS = minidlnad
++bin_PROGRAMS = minidlna
+ check_PROGRAMS = testupnpdescgen
+-minidlnad_SOURCES = minidlna.c upnphttp.c upnpdescgen.c upnpsoap.c \
++minidlna_SOURCES = minidlna.c upnphttp.c upnpdescgen.c upnpsoap.c \
+ 			upnpreplyparse.c minixml.c clients.c \
+ 			getifaddr.c daemonize.c upnpglobalvars.c \
+ 			options.c minissdp.c uuid.c upnpevents.c \
+@@ -21,7 +21,7 @@
+ flacoggflag = -logg
+ #endif
+ 
+-minidlnad_LDADD = \
++minidlna_LDADD = \
+ 	@LIBJPEG_LIBS@ \
+ 	@LIBID3TAG_LIBS@ \
+ 	@LIBSQLITE3_LIBS@ \
+@@ -32,7 +32,7 @@
+ 	@LIBICONV@ \
+ 	-lFLAC  $(flacoggflag) $(vorbisflag)
+ 
+-minidlnad_LDFLAGS = @STATIC_LDFLAGS@
++minidlna_LDFLAGS = @STATIC_LDFLAGS@
+ 
+ testupnpdescgen_SOURCES = testupnpdescgen.c upnpdescgen.c
+ testupnpdescgen_LDADD = \

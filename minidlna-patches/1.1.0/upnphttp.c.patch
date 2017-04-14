@@ -1,0 +1,197 @@
+--- minidlna-1.1.0.orig/upnphttp.c	2013-03-18 01:37:46.000000000 -0400
++++ minidlna-1.1.0/upnphttp.c	2013-10-27 14:39:27.000000000 -0400
+@@ -83,7 +83,7 @@
+ 
+ //#define MAX_BUFFER_SIZE 4194304 // 4MB -- Too much?
+ #define MAX_BUFFER_SIZE 2147483647 // 2GB -- Too much?
+-#define MIN_BUFFER_SIZE 65536
++#define MIN_BUFFER_SIZE 73696
+ 
+ #include "icons.c"
+ 
+@@ -1192,7 +1192,7 @@
+ }
+ 
+ void
+-send_file(struct upnphttp * h, int sendfd, off_t offset, off_t end_offset)
++send_file(struct upnphttp * h, int sendfd, off_t offset, off_t end_offset, int32_t is_live)
+ {
+ 	off_t send_size;
+ 	off_t ret;
+@@ -1201,10 +1201,10 @@
+ 	int try_sendfile = 1;
+ #endif
+ 
+-	while( offset < end_offset )
++	while( (offset < end_offset) || is_live )
+ 	{
+ #if HAVE_SENDFILE
+-		if( try_sendfile )
++		if( try_sendfile && !is_live )
+ 		{
+ 			send_size = ( ((end_offset - offset) < MAX_BUFFER_SIZE) ? (end_offset - offset + 1) : MAX_BUFFER_SIZE);
+ 			ret = sys_sendfile(h->socket, sendfd, &offset, send_size);
+@@ -1227,8 +1227,8 @@
+ 		/* Fall back to regular I/O */
+ 		if( !buf )
+ 			buf = malloc(MIN_BUFFER_SIZE);
+-		send_size = ( ((end_offset - offset) < MIN_BUFFER_SIZE) ? (end_offset - offset + 1) : MIN_BUFFER_SIZE);
+-		lseek(sendfd, offset, SEEK_SET);
++		send_size = ( (((end_offset - offset) < MIN_BUFFER_SIZE) && !is_live) ? (end_offset - offset + 1) : MIN_BUFFER_SIZE);
++		if (!is_live) lseek(sendfd, offset, SEEK_SET);
+ 		ret = read(sendfd, buf, send_size);
+ 		if( ret == -1 ) {
+ 			DPRINTF(E_DEBUG, L_HTTP, "read error :: error no. %d [%s]\n", errno, strerror(errno));
+@@ -1364,7 +1364,7 @@
+ 	if( send_data(h, header, ret, MSG_MORE) == 0 )
+ 	{
+  		if( h->req_command != EHead )
+-			send_file(h, fd, 0, size-1);
++			send_file(h, fd, 0, size-1, 0);
+ 	}
+ 	close(fd);
+ 	CloseSocket_upnphttp(h);
+@@ -1416,7 +1416,7 @@
+ 	if( send_data(h, header, ret, MSG_MORE) == 0 )
+ 	{
+  		if( h->req_command != EHead )
+-			send_file(h, fd, 0, size-1);
++			send_file(h, fd, 0, size-1, 0);
+ 	}
+ 	close(fd);
+ 	CloseSocket_upnphttp(h);
+@@ -1731,7 +1731,7 @@
+ 	int rows, ret;
+ 	char date[30];
+ 	time_t curtime = time(NULL);
+-	off_t total, offset, size;
++	off_t total, offset, size = 0;
+ 	int64_t id;
+ 	int sendfh;
+ 	uint32_t dlna_flags = DLNA_FLAG_DLNA_V1_5|DLNA_FLAG_HTTP_STALLING|DLNA_FLAG_TM_B;
+@@ -1741,7 +1741,8 @@
+ 	                char path[PATH_MAX];
+ 	                char mime[32];
+ 	                char dlna[96];
+-	              } last_file = { 0, 0 };
++			int32_t is_live;
++	              } last_file = { 0, 0, { 0 }, { 0 }, { 0 }, 0 };
+ #if USE_FORK
+ 	pid_t newpid = 0;
+ #endif
+@@ -1760,7 +1761,7 @@
+ 	}
+ 	if( id != last_file.id || h->req_client != last_file.client )
+ 	{
+-		snprintf(buf, sizeof(buf), "SELECT PATH, MIME, DLNA_PN from DETAILS where ID = '%lld'", (long long)id);
++		snprintf(buf, sizeof(buf), "SELECT PATH, MIME, DLNA_PN, IS_LIVE from DETAILS where ID = '%lld'", (long long)id);
+ 		ret = sql_get_table(db, buf, &result, &rows, NULL);
+ 		if( (ret != SQLITE_OK) )
+ 		{
+@@ -1768,7 +1769,7 @@
+ 			Send500(h);
+ 			return;
+ 		}
+-		if( !rows || !result[3] || !result[4] )
++		if( !rows || !result[4] || !result[5] )
+ 		{
+ 			DPRINTF(E_WARN, L_HTTP, "%s not found, responding ERROR 404\n", object);
+ 			sqlite3_free_table(result);
+@@ -1778,10 +1779,10 @@
+ 		/* Cache the result */
+ 		last_file.id = id;
+ 		last_file.client = h->req_client;
+-		strncpy(last_file.path, result[3], sizeof(last_file.path)-1);
+-		if( result[4] )
++		strncpy(last_file.path, result[4], sizeof(last_file.path)-1);
++		if( result[5] )
+ 		{
+-			strncpy(last_file.mime, result[4], sizeof(last_file.mime)-1);
++			strncpy(last_file.mime, result[5], sizeof(last_file.mime)-1);
+ 			/* From what I read, Samsung TV's expect a [wrong] MIME type of x-mkv. */
+ 			if( cflags & FLAG_SAMSUNG )
+ 			{
+@@ -1802,10 +1803,14 @@
+ 					strcpy(last_file.mime+6, "divx");
+ 			}
+ 		}
+-		if( result[5] )
++		if( result[6] )
+ 			snprintf(last_file.dlna, sizeof(last_file.dlna), "DLNA.ORG_PN=%s;", result[5]);
+ 		else
+ 			last_file.dlna[0] = '\0';
++		if ( result[7] )
++			last_file.is_live = atoi(result[7]);
++		else
++			last_file.is_live = 0;
+ 		sqlite3_free_table(result);
+ 	}
+ #if USE_FORK
+@@ -1856,8 +1861,10 @@
+ 		Send404(h);
+ 		goto error;
+ 	}
+-	size = lseek(sendfh, 0, SEEK_END);
+-	lseek(sendfh, 0, SEEK_SET);
++	if ( !last_file.is_live ) { // no seek on live streams
++	    size = lseek(sendfh, 0, SEEK_END);
++	    lseek(sendfh, 0, SEEK_SET);
++	}
+ 
+ 	str.data = header;
+ 	str.size = sizeof(header);
+@@ -1865,9 +1872,9 @@
+ 
+ 	strcatf(&str, "HTTP/1.1 20%c OK\r\n"
+ 	              "Content-Type: %s\r\n",
+-	              (h->reqflags & FLAG_RANGE ? '6' : '0'),
++	              (((h->reqflags & FLAG_RANGE) && ( !last_file.is_live )) ? '6' : '0'),
+ 	              last_file.mime);
+-	if( h->reqflags & FLAG_RANGE )
++	if( (h->reqflags & FLAG_RANGE) && ( !last_file.is_live ) )
+ 	{
+ 		if( !h->req_RangeEnd || h->req_RangeEnd == size )
+ 		{
+@@ -1894,15 +1901,15 @@
+ 		              (intmax_t)total, (intmax_t)h->req_RangeStart,
+ 		              (intmax_t)h->req_RangeEnd, (intmax_t)size);
+ 	}
+-	else
++	else if ( !(last_file.is_live) )
+ 	{
+ 		h->req_RangeEnd = size - 1;
+ 		total = size;
+ 		strcatf(&str, "Content-Length: %jd\r\n", (intmax_t)total);
+-	}
++	} // no range or size on live streams
+ 
+ #if USE_FORK
+-	if( (h->reqflags & FLAG_XFERBACKGROUND) && (setpriority(PRIO_PROCESS, 0, 19) == 0) )
++	if( (h->reqflags & FLAG_XFERBACKGROUND) && ( !last_file.is_live ) && (setpriority(PRIO_PROCESS, 0, 19) == 0) )
+ 		strcatf(&str, "transferMode.dlna.org: Background\r\n");
+ 	else
+ #endif
+@@ -1923,6 +1930,14 @@
+ 			break;
+ 	}
+ 
++        if ( last_file.is_live ) {
++            /* no http stalling or background transfers with live streams. TODO: how to disable seek, fast foward, etc.? */
++            if (dlna_flags & DLNA_FLAG_HTTP_STALLING) dlna_flags -= DLNA_FLAG_HTTP_STALLING;
++            if (dlna_flags & DLNA_FLAG_TM_B) dlna_flags -= DLNA_FLAG_TM_B;
++            /* no range request either */
++            offset = 0;
++        }
++
+ 	if( h->reqflags & FLAG_CAPTION )
+ 	{
+ 		if( sql_get_int_field(db, "SELECT ID from CAPTIONS where ID = '%lld'", id) > 0 )
+@@ -1944,7 +1959,7 @@
+ 	if( send_data(h, str.data, str.off, MSG_MORE) == 0 )
+ 	{
+  		if( h->req_command != EHead )
+-			send_file(h, sendfh, offset, h->req_RangeEnd);
++			send_file(h, sendfh, offset, h->req_RangeEnd, last_file.is_live);
+ 	}
+ 	close(sendfh);
+ 

@@ -1,0 +1,10 @@
+--- minidlna-1.1.0.orig/options.c	2012-11-16 02:40:40.000000000 -0500
++++ minidlna-1.1.0/options.c	2013-10-22 13:18:40.000000000 -0400
+@@ -53,6 +53,7 @@
+ 	{ UPNPMODEL_NUMBER, "model_number"},
+ 	{ UPNPFRIENDLYNAME, "friendly_name"},
+ 	{ UPNPMEDIADIR, "media_dir"},
++	{ UPNPLIVEMEDIADIR, "live_media_dir"},
+ 	{ UPNPALBUMART_NAMES, "album_art_names"},
+ 	{ UPNPINOTIFY, "inotify" },
+ 	{ UPNPDBDIR, "db_dir" },

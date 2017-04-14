@@ -1,0 +1,16 @@
+[Unit]
+Description=MiniDLNA Server
+After=network-online.target hdhrfs.service remote-fs.target
+Requires=network-online.target hdhrfs.service remote-fs.target
+
+[Service]
+ExecStart=/usr/local/bin/minidlna
+Type=forking
+PIDFile=/var/run/minidlna/minidlna.pid
+User=user
+
+[Install]
+WantedBy=multi-user.target
+
+# on first startup ever, may have to run minidlna by yourself so indexing can complete without a timeout
+

@@ -1,0 +1,77 @@
+--- minidlna-1.1.0.orig/metadata.c	2013-03-08 19:03:03.000000000 -0500
++++ minidlna-1.1.0/metadata.c	2013-10-22 18:54:21.000000000 -0400
+@@ -331,7 +331,7 @@
+ }
+ 
+ int64_t
+-GetAudioMetadata(const char *path, char *name)
++GetAudioMetadata(const char *path, char *name, int32_t is_live)
+ {
+ 	char type[4];
+ 	static char lang[6] = { '\0' };
+@@ -504,12 +504,12 @@
+ 
+ 	ret = sql_exec(db, "INSERT into DETAILS"
+ 	                   " (PATH, SIZE, TIMESTAMP, DURATION, CHANNELS, BITRATE, SAMPLERATE, DATE,"
+-	                   "  TITLE, CREATOR, ARTIST, ALBUM, GENRE, COMMENT, DISC, TRACK, DLNA_PN, MIME, ALBUM_ART) "
++	                   "  TITLE, CREATOR, ARTIST, ALBUM, GENRE, COMMENT, DISC, TRACK, DLNA_PN, MIME, ALBUM_ART, IS_LIVE) "
+ 	                   "VALUES"
+-	                   " (%Q, %lld, %ld, '%s', %d, %d, %d, %Q, %Q, %Q, %Q, %Q, %Q, %Q, %d, %d, %Q, '%s', %lld);",
++	                   " (%Q, %lld, %ld, '%s', %d, %d, %d, %Q, %Q, %Q, %Q, %Q, %Q, %Q, %d, %d, %Q, '%s', %lld, %d);",
+ 	                   path, (long long)file.st_size, file.st_mtime, m.duration, song.channels, song.bitrate, song.samplerate, m.date,
+ 	                   m.title, m.creator, m.artist, m.album, m.genre, m.comment, song.disc, song.track,
+-	                   m.dlna_pn, song.mime?song.mime:m.mime, album_art);
++	                   m.dlna_pn, song.mime?song.mime:m.mime, album_art, is_live);
+ 	if( ret != SQLITE_OK )
+ 	{
+ 		fprintf(stderr, "Error inserting details for '%s'!\n", path);
+@@ -536,7 +536,7 @@
+ }
+ 
+ int64_t
+-GetImageMetadata(const char *path, char *name)
++GetImageMetadata(const char *path, char *name, int32_t is_live)
+ {
+ 	ExifData *ed;
+ 	ExifEntry *e = NULL;
+@@ -688,11 +688,11 @@
+ 
+ 	ret = sql_exec(db, "INSERT into DETAILS"
+ 	                   " (PATH, TITLE, SIZE, TIMESTAMP, DATE, RESOLUTION,"
+-	                    " ROTATION, THUMBNAIL, CREATOR, DLNA_PN, MIME) "
++	                    " ROTATION, THUMBNAIL, CREATOR, DLNA_PN, MIME, IS_LIVE) "
+ 	                   "VALUES"
+-	                   " (%Q, '%q', %lld, %ld, %Q, %Q, %Q, %d, %Q, %Q, %Q);",
++	                   " (%Q, '%q', %lld, %ld, %Q, %Q, %Q, %d, %Q, %Q, %Q, %d);",
+ 	                   path, name, (long long)file.st_size, file.st_mtime, m.date, m.resolution,
+-	                   m.rotation, thumb, m.creator, m.dlna_pn, m.mime);
++	                   m.rotation, thumb, m.creator, m.dlna_pn, m.mime, is_live);
+ 	if( ret != SQLITE_OK )
+ 	{
+ 		fprintf(stderr, "Error inserting details for '%s'!\n", path);
+@@ -708,7 +708,7 @@
+ }
+ 
+ int64_t
+-GetVideoMetadata(const char *path, char *name)
++GetVideoMetadata(const char *path, char *name, int32_t is_live)
+ {
+ 	struct stat file;
+ 	int ret, i;
+@@ -1595,13 +1595,13 @@
+ 
+ 	ret = sql_exec(db, "INSERT into DETAILS"
+ 	                   " (PATH, SIZE, TIMESTAMP, DURATION, DATE, CHANNELS, BITRATE, SAMPLERATE, RESOLUTION,"
+-	                   "  TITLE, CREATOR, ARTIST, GENRE, COMMENT, DLNA_PN, MIME, ALBUM_ART) "
++	                   "  TITLE, CREATOR, ARTIST, GENRE, COMMENT, DLNA_PN, MIME, ALBUM_ART, IS_LIVE) "
+ 	                   "VALUES"
+-	                   " (%Q, %lld, %ld, %Q, %Q, %Q, %Q, %Q, %Q, '%q', %Q, %Q, %Q, %Q, %Q, '%q', %lld);",
++	                   " (%Q, %lld, %ld, %Q, %Q, %Q, %Q, %Q, %Q, '%q', %Q, %Q, %Q, %Q, %Q, '%q', %lld, %d);",
+ 	                   path, (long long)file.st_size, file.st_mtime, m.duration,
+ 	                   m.date, m.channels, m.bitrate, m.frequency, m.resolution,
+ 			   m.title, m.creator, m.artist, m.genre, m.comment, m.dlna_pn,
+-                           m.mime, album_art);
++                           m.mime, album_art, is_live);
+ 	if( ret != SQLITE_OK )
+ 	{
+ 		fprintf(stderr, "Error inserting details for '%s'!\n", path);

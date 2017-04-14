@@ -1,0 +1,60 @@
+--- minidlna-1.1.0.orig/scanner.c	2013-01-02 16:00:52.000000000 -0500
++++ minidlna-1.1.0/scanner.c	2013-10-22 13:46:09.000000000 -0400
+@@ -444,7 +444,7 @@
+ }
+ 
+ int
+-insert_file(char *name, const char *path, const char *parentID, int object)
++insert_file(char *name, const char *path, const char *parentID, int object, int32_t is_live)
+ {
+ 	char class[32];
+ 	char objectID[64];
+@@ -460,14 +460,14 @@
+ 			return -1;
+ 		strcpy(base, IMAGE_DIR_ID);
+ 		strcpy(class, "item.imageItem.photo");
+-		detailID = GetImageMetadata(path, name);
++		detailID = GetImageMetadata(path, name, is_live);
+ 	}
+ 	else if( is_video(name) )
+ 	{
+  		orig_name = strdup(name);
+ 		strcpy(base, VIDEO_DIR_ID);
+ 		strcpy(class, "item.videoItem");
+-		detailID = GetVideoMetadata(path, name);
++		detailID = GetVideoMetadata(path, name, is_live);
+ 		if( !detailID )
+ 			strcpy(name, orig_name);
+ 	}
+@@ -480,7 +480,7 @@
+ 	{
+ 		strcpy(base, MUSIC_DIR_ID);
+ 		strcpy(class, "item.audioItem.musicTrack");
+-		detailID = GetAudioMetadata(path, name);
++		detailID = GetAudioMetadata(path, name, is_live);
+ 	}
+ 	free(orig_name);
+ 	if( !detailID )
+@@ -686,9 +686,12 @@
+ 	char *name = NULL;
+ 	static long long unsigned int fileno = 0;
+ 	enum file_types type;
++	media_types dir_types_nolive = dir_types;
++
++	if (dir_types_nolive & TYPE_LIVE) dir_types_nolive -= TYPE_LIVE; 
+ 
+ 	DPRINTF(parent?E_INFO:E_WARN, L_SCANNER, _("Scanning %s\n"), dir);
+-	switch( dir_types )
++	switch( dir_types_nolive )
+ 	{
+ 		case ALL_MEDIA:
+ 			n = scandir(dir, &namelist, filter_avp, alphasort);
+@@ -754,7 +757,7 @@
+ 		}
+ 		else if( type == TYPE_FILE && (access(full_path, R_OK) == 0) )
+ 		{
+-			if( insert_file(name, full_path, (parent ? parent:""), i+startID) == 0 )
++			if( insert_file(name, full_path, (parent ? parent:""), i+startID, (dir_types&TYPE_LIVE)?(1):(0)) == 0 )
+ 				fileno++;
+ 		}
+ 		free(name);

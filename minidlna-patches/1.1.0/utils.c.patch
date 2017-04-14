@@ -1,0 +1,21 @@
+--- minidlna-1.1.0.orig/utils.c	2013-04-02 19:29:21.000000000 -0400
++++ minidlna-1.1.0/utils.c	2013-10-22 13:49:50.000000000 -0400
+@@ -435,6 +435,9 @@
+ 	unsigned char type = TYPE_UNKNOWN;
+ 	char str_buf[PATH_MAX];
+ 	ssize_t len;
++	media_types dir_type_nolive = dir_type;
++
++	if (dir_type_nolive & TYPE_LIVE) { dir_type_nolive -= TYPE_LIVE; }
+ 
+ 	if( lstat(path, &entry) == 0 )
+ 	{
+@@ -459,7 +462,7 @@
+ 		}
+ 		else if( S_ISREG(entry.st_mode) )
+ 		{
+-			switch( dir_type )
++			switch( dir_type_nolive )
+ 			{
+ 				case ALL_MEDIA:
+ 					if( is_image(path) ||

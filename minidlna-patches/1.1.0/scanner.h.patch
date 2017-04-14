@@ -1,0 +1,11 @@
+--- minidlna-1.1.0.orig/scanner.h	2012-06-29 19:14:27.000000000 -0400
++++ minidlna-1.1.0/scanner.h	2013-10-22 13:44:18.000000000 -0400
+@@ -75,7 +75,7 @@
+ insert_directory(const char *name, const char *path, const char *base, const char *parentID, int objectID);
+ 
+ int
+-insert_file(char *name, const char *path, const char *parentID, int object);
++insert_file(char *name, const char *path, const char *parentID, int object, int32_t is_live);
+ 
+ int
+ CreateDatabase(void);

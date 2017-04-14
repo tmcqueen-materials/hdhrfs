@@ -1,0 +1,5 @@
+Also do:
+mv minidlnad.8 minidlna.8
+
+and, probably, configure --prefix=/usr after autoreconf 
+

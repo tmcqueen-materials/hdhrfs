@@ -1,0 +1,12 @@
+--- minidlna-1.1.0.orig/scanner_sqlite.h	2012-11-16 03:06:24.000000000 -0500
++++ minidlna-1.1.0/scanner_sqlite.h	2013-10-22 13:54:49.000000000 -0400
+@@ -54,7 +54,8 @@
+ 					"ALBUM_ART INTEGER DEFAULT 0, "
+ 					"ROTATION INTEGER, "
+ 					"DLNA_PN TEXT, "
+-                                        "MIME TEXT);";
++                                        "MIME TEXT, "
++					"IS_LIVE DEFAULT 0);";
+ 
+ char create_albumArtTable_sqlite[] = "CREATE TABLE ALBUM_ART ("
+ 					"ID INTEGER PRIMARY KEY AUTOINCREMENT, "

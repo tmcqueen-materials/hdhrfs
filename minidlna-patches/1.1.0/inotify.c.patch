@@ -1,0 +1,27 @@
+--- minidlna-1.1.0.orig/inotify.c	2012-10-03 03:26:00.000000000 -0400
++++ minidlna-1.1.0/inotify.c	2013-10-22 13:48:24.000000000 -0400
+@@ -290,6 +290,7 @@
+ 	char * id = NULL;
+ 	int depth = 1;
+ 	int ts;
++	int32_t is_live = 0;
+ 	media_types types = ALL_MEDIA;
+ 	struct media_dir_s * media_path = media_dirs;
+ 	struct stat st;
+@@ -310,6 +311,7 @@
+ 		}
+ 		media_path = media_path->next;
+ 	}
++	if (types&TYPE_LIVE) { is_live = 1; types -= TYPE_LIVE; }
+ 	switch( types )
+ 	{
+ 		case ALL_MEDIA:
+@@ -422,7 +424,7 @@
+ 	if( !depth )
+ 	{
+ 		//DEBUG DPRINTF(E_DEBUG, L_INOTIFY, "Inserting %s\n", name);
+-		insert_file(name, path, id+2, get_next_available_id("OBJECTS", id));
++		insert_file(name, path, id+2, get_next_available_id("OBJECTS", id), is_live);
+ 		sqlite3_free(id);
+ 		if( (is_audio(path) || is_playlist(path)) && next_pl_fill != 1 )
+ 		{

@@ -1,0 +1,14 @@
+[Unit]
+Description=HD Homerun FUSE Filesystem
+After=network-online.target zfs-mount.service
+Requires=network-online.target zfs-mount.service
+
+[Service]
+ExecStart=/bin/bash -c "LD_LIBRARY_PATH=\"$LD_LIBRARY_PATH:/home/user/libhdhomerun\" /home/user/libhdhomerun/hdhrfs /LiveTV"
+ExecStop=/bin/bash -c "fusermount -u /LiveTV"
+Type=forking
+User=user
+
+[Install]
+WantedBy=multi-user.target
+
