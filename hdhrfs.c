@@ -20,15 +20,18 @@
 #define TIME_PER_WAIT 500000      // MAX_WAITS*TIME_PER_WAIT is maximum time to wait for available tuner, in microseconds (30 s)
 #define FREE_TUNER_DELAY 4        // in units of TIME_PER_WAIT, in case a new reader wants the same channel within some short time (2 s)
 
-#define TIME_PER_RECV 20000	  // in microseconds (20 ms)
-#define MAX_RECV_WAITS_NULL 5     // insert null packets and return if not enough data obtained from receiver in 100 ms
-#define MAX_RECV_WAITS 500        // restart tuner if no data received for 10 seconds
+#define TIME_PER_RECV 5000	  // in microseconds (5 ms)
+#define MAX_RECV_WAITS_NULL 50    // insert null packets and return if not enough data obtained from receiver in 100 ms
+#define MAX_RECV_WAITS 2500       // restart tuner if no data received for 10 seconds
 
+//#define USE_TRANSCODE
+#ifdef USE_TRANSCODE
 //#define TRANSCODE_EXEC_COMMAND execl("/usr/bin/ffmpeg", "/usr/bin/ffmpeg", "-v", "0", "-i", "-", "-async", "1", "-ss", "00:00:02", "-threads", "1", "-acodec", "libfdk_aac", "-ac", "2", "-ar", "48000", "-ab", "128k", "-b:v", "10000k", "-vcodec", "libx264", "-preset", "ultrafast", /*"-x264opts", "\"sync-lookahead=0:rc-lookahead=10\"",*/ "-tune", "zerolatency", "-map", "0:0", "-map", "0:1", "-f", "mpegts", /*"matroska",*/ "-", (char *)0);
 #define TRANSCODE_EXEC_COMMAND execl("/bin/cat", "/bin/cat", "-", (char *)0);
+#endif
 
-// NULL packet for return when no data from TRANSCODE_EXEC_COMMAND is available. This should be valid return data in the same format as the
-// OUTPUT of TRANSCODE_EXEC_COMMAND. Right now, this is set to be a valid, null, MPEG2-TS transport stream packet
+// NULL packet for return when no data is available. This should be valid return data in the same format as the
+// OUTPUT of TRANSCODE_EXEC_COMMAND (if used) or output of tuner. Right now, this is set to be a valid, null, MPEG2-TS transport stream packet
 #define NULL_PACKET_SIZE 188      // in bytes
 const unsigned char null_packet[NULL_PACKET_SIZE] = {
 0x47, 0x1F, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -47,8 +50,8 @@ const unsigned char null_packet[NULL_PACKET_SIZE] = {
 #define NUM_TUNERS 2
 // IP address(s) of hdhr tuners
 char *hdhr_tuner[NUM_TUNERS] = {
-	"192.168.1.2",
-	"192.168.1.2"
+	"192.168.2.42",
+	"192.168.2.42"
 	};
 int hdhr_tuner_num[NUM_TUNERS] = {
 	0,
@@ -125,8 +128,10 @@ uint8_t hdhr_reader_used[NUM_TUNERS][MAX_READERS];
 size_t hdhr_reader_offset[NUM_TUNERS][MAX_READERS];
 
 uint8_t hdhr_first_data_returned[NUM_TUNERS];
+#ifdef USE_TRANSCODE
 pid_t hdhr_transcode_pid[NUM_TUNERS];
 int hdhr_transcode_pipes[NUM_TUNERS][4];
+#endif
 int hdhr_cur_chnl[NUM_TUNERS];
 
 // end of items protected by hdhr_mutex
@@ -136,7 +141,9 @@ int hdhr_cur_chnl[NUM_TUNERS];
 // Caller MUST lock mutex as appropriate
 // Caller MUST also allocate buffers and initialize position pointers as desired after this call
 int startTuner(int tuner, int chnl) { // command to (re)start a tuner. Does not distrupt reader or memory buffer tuner variables
+#ifdef USE_TRANSCODE
         sigset_t mask;
+#endif
 
         /* setup channel and program */
         if (hdhomerun_device_set_tuner_channel(hdhr[tuner], chnl_chnl[chnl]) != 1) {
@@ -154,6 +161,7 @@ int startTuner(int tuner, int chnl) { // command to (re)start a tuner. Does not 
             return 3;
         }
 
+#ifdef USE_TRANSCODE
         /* At this point, setup pipes and fork off the transcode program.
          */
         if (pipe(&(hdhr_transcode_pipes[tuner][0])) != 0) {
@@ -218,7 +226,7 @@ int startTuner(int tuner, int chnl) { // command to (re)start a tuner. Does not 
 #else
 #warning "F_GETPIPE_SZ not defined: if pipe size is less than RECV_SIZE or IDEAL_READ_SIZE, program may fail to function (was _GNU_SOURCE defined?)"
 #endif
-
+#endif
 	hdhr_nWaits[tuner] = 0;
 	hdhr_first_data_returned[tuner] = 0;
 
@@ -226,10 +234,12 @@ int startTuner(int tuner, int chnl) { // command to (re)start a tuner. Does not 
 }
 
 void cleanupTunerConnection(int tuner) { // does *not* destroy tuner, only cleans up in case of error, etc. Calling process MUST lock mutex as appropriate
+#ifdef USE_TRANSCODE
 	int i;
         struct timespec timeout;
         sigset_t mask;
 	pid_t pid_tmp;
+#endif
 	if (tuner < 0 || tuner >= NUM_TUNERS) return;
 
         if (hdhr[tuner] != NULL)
@@ -238,6 +248,7 @@ void cleanupTunerConnection(int tuner) { // does *not* destroy tuner, only clean
 	hdhr_nWaits[tuner] = 0;
 	hdhr_first_data_returned[tuner] = 0;
 
+#ifdef USE_TRANSCODE
 	pid_tmp = hdhr_transcode_pid[tuner];
         if (pid_tmp > 0) {
             kill(pid_tmp, KILL_SIG);
@@ -254,6 +265,7 @@ void cleanupTunerConnection(int tuner) { // does *not* destroy tuner, only clean
 		close(hdhr_transcode_pipes[tuner][i]);
 	    hdhr_transcode_pipes[tuner][i] = 0;
 	}
+#endif
 
 	return;
 }
@@ -377,7 +389,11 @@ static int hdhrfs_open(const char *path, struct fuse_file_info *fi)
 	    /* correct channel tuner check first */
             for (tuner = 0; tuner < NUM_TUNERS; tuner++)
                 if (pthread_mutex_lock(&(hdhr_mutex[tuner])) == 0) {
-                    if (hdhr_cur_chnl[tuner] == chnl && hdhr_num_readers[tuner] < MAX_READERS && hdhr_transcode_pid[tuner] > 0) {
+                    if (hdhr_cur_chnl[tuner] == chnl && hdhr_num_readers[tuner] < MAX_READERS
+#ifdef USE_TRANSCODE
+                        && hdhr_transcode_pid[tuner] > 0
+#endif
+                        ) {
 			// find reader number
 			for (i = 0; i < MAX_READERS && reader < 0; i++) {
 			    if (hdhr_reader_used[tuner][i] == 0) {
@@ -393,7 +409,11 @@ static int hdhrfs_open(const char *path, struct fuse_file_info *fi)
 	    /* available tuner check second */
             for (tuner = 0; tuner < NUM_TUNERS; tuner++)
                 if (pthread_mutex_lock(&(hdhr_mutex[tuner])) == 0) {
-		    if (hdhr_num_readers[tuner] == 0 && hdhr_cur_chnl[tuner] < 0 && hdhr_transcode_pid[tuner] == 0) {
+		    if (hdhr_num_readers[tuner] == 0 && hdhr_cur_chnl[tuner] < 0
+#ifdef USE_TRANSCODE
+                        && hdhr_transcode_pid[tuner] == 0
+#endif
+                        ) {
 			reader = 0;
                         goto program_tuner; // tuner acquired
 		    } else {
@@ -449,7 +469,8 @@ return_tuner:
 /* fuse: release (close) */
 static int hdhrfs_release(const char *path, struct fuse_file_info *fi)
 {
-        int tuner, reader, i;
+        int tuner, reader;
+
         if (TUNER_MASK(fi->fh) < 1 || TUNER_MASK(fi->fh) > NUM_TUNERS)
                 return -ENOENT;
 	if (READER_MASK(fi->fh) < 1 || READER_MASK(fi->fh) > MAX_READERS)
@@ -476,10 +497,13 @@ static int hdhrfs_release(const char *path, struct fuse_file_info *fi)
 	    fprintf(stdout, "No readers left on tuner %i, freeing.\n", tuner);
             cleanupTuner(tuner);
 
-	    fprintf(stdout, "Closed tuner %i, states: (%i,%i,%i,%i,%lli,%i,%i,%i,%i,%i,%i)\n", tuner, hdhr_num_readers[tuner],
-		hdhr_cur_chnl[tuner], hdhr_raw_buf_pos[tuner], hdhr_raw_buf_maxpos[tuner], hdhr_out_buf_start_offset[tuner],
-		hdhr_out_buf_maxpos[tuner], hdhr_transcode_pid[tuner], hdhr_transcode_pipes[tuner][0], hdhr_transcode_pipes[tuner][1],
+	    fprintf(stdout, "Closed tuner %i, states: (%i,%i,%i,%i,%lli,%i)\n", tuner, hdhr_num_readers[tuner],
+		hdhr_cur_chnl[tuner], hdhr_raw_buf_pos[tuner], hdhr_raw_buf_maxpos[tuner], (long long int)(hdhr_out_buf_start_offset[tuner]),
+		hdhr_out_buf_maxpos[tuner]);
+#ifdef USE_TRANSCODE
+            fprintf(stdout, "                         (%i,%i,%i,%i,%i)\n", hdhr_transcode_pid[tuner], hdhr_transcode_pipes[tuner][0], hdhr_transcode_pipes[tuner][1],
 		hdhr_transcode_pipes[tuner][2], hdhr_transcode_pipes[tuner][3]);
+#endif
 	}
 
         pthread_mutex_unlock(&(hdhr_mutex[tuner]));
@@ -521,32 +545,34 @@ restart_read:
 
 	    if (hdhr_reader_offset[tuner][reader]+offset < hdhr_out_buf_start_offset[tuner]) {
 		fprintf(stdout, "Warning: Reader %i on tuner %i tried to read at offset %lli+%lli, less than start of buffer at %lli\n",
-			reader, tuner, hdhr_reader_offset[tuner][reader], offset, hdhr_out_buf_start_offset[tuner]);
+			reader, tuner, (long long int)(hdhr_reader_offset[tuner][reader]), (long long int)offset, (long long int)(hdhr_out_buf_start_offset[tuner]));
 		hdhr_reader_offset[tuner][reader] = hdhr_out_buf_start_offset[tuner] - offset;
 	    }
 
 	    copy_offset = hdhr_reader_offset[tuner][reader]+offset-hdhr_out_buf_start_offset[tuner];
 	    if (copy_offset > BUFFER_SIZE) {
 		fprintf(stdout, "Warning: Reader %i on tuner %i requested starting reading at offset %lli+%lli, outside current range starting at %lli\n",
-			reader, tuner, hdhr_reader_offset[tuner][reader], offset, hdhr_out_buf_start_offset[tuner]);
+			reader, tuner, (long long int)(hdhr_reader_offset[tuner][reader]), (long long int)(offset), (long long int)(hdhr_out_buf_start_offset[tuner]));
 		hdhr_out_buf_start_offset[tuner] = hdhr_reader_offset[tuner][reader]+offset;
 		hdhr_out_buf_maxpos[tuner] = 0;
 		copy_offset = 0;
 	    }
 
 	    if (copy_offset+size > BUFFER_SIZE) { // free up bits for new info
-		recvSize = copy_offset+size - BUFFER_SIZE;
+		recvSize = ((copy_offset+size - BUFFER_SIZE + RECV_SIZE - 1) / RECV_SIZE) * RECV_SIZE;
 		if (hdhr_out_buf_maxpos[tuner]-recvSize > 0) {
 		    memmove(hdhr_out_buf[tuner], hdhr_out_buf[tuner]+recvSize, hdhr_out_buf_maxpos[tuner]-recvSize);
 		    hdhr_out_buf_maxpos[tuner] -= recvSize;
 		} else  {
+                    recvSize = hdhr_out_buf_maxpos[tuner];
 		    hdhr_out_buf_maxpos[tuner] = 0;
 		}
 		hdhr_out_buf_start_offset[tuner] += recvSize;
 		copy_offset -= recvSize;
 	    }
 
-	    /* if available, send more data to transcode process */
+#ifdef USE_TRANSCODE
+            /* if available, send more data to transcode process */
 	    if (hdhr_raw_buf_pos[tuner] < hdhr_raw_buf_maxpos[tuner]) {
 		lastWrite = write(hdhr_transcode_pipes[tuner][1], hdhr_raw_buf[tuner]+hdhr_raw_buf_pos[tuner], hdhr_raw_buf_maxpos[tuner]-hdhr_raw_buf_pos[tuner]);
 		if (lastWrite > 0) { hdhr_raw_buf_pos[tuner] += lastWrite; didSomething = 1; }
@@ -556,6 +582,7 @@ restart_read:
 		    goto read_restart_tuner;
 		}
 	    }
+#endif
 
 	    /* shift input buffer bits if required */
 	    if (hdhr_raw_buf_maxpos[tuner]+RECV_SIZE > BUFFER_SIZE && hdhr_raw_buf_pos[tuner] >= RECV_SIZE) {
@@ -571,13 +598,21 @@ restart_read:
 		    memcpy(hdhr_raw_buf[tuner]+hdhr_raw_buf_maxpos[tuner], toWrite, recvSize);
 		    hdhr_raw_buf_maxpos[tuner] += recvSize;
 		    didSomething = 1;
+                    /* reset counter for null packets since we are getting data */
+                    counter = 0;
 	        }
 	    }
 
-	    /* get data from transcode process if needed */
+	    /* get data from transcode process (or raw buffer) if needed */
 	    if (copy_offset+size > hdhr_out_buf_maxpos[tuner] || hdhr_out_buf_maxpos[tuner] < BUFFER_SIZE/2) {
-	        lastWrite = read(hdhr_transcode_pipes[tuner][2], hdhr_out_buf[tuner]+hdhr_out_buf_maxpos[tuner], (((BUFFER_SIZE-hdhr_out_buf_maxpos[tuner]) < IDEAL_READ_SIZE) ? (BUFFER_SIZE-hdhr_out_buf_maxpos[tuner]) : (IDEAL_READ_SIZE)));
-
+                lastWrite = (((BUFFER_SIZE-hdhr_out_buf_maxpos[tuner]) < IDEAL_READ_SIZE) ? (BUFFER_SIZE-hdhr_out_buf_maxpos[tuner]) : (IDEAL_READ_SIZE));
+#ifdef USE_TRANSCODE
+	        lastWrite = read(hdhr_transcode_pipes[tuner][2], hdhr_out_buf[tuner]+hdhr_out_buf_maxpos[tuner], lastWrite);
+#else
+                lastWrite = (lastWrite > (hdhr_raw_buf_maxpos[tuner]-hdhr_raw_buf_pos[tuner])) ? (hdhr_raw_buf_maxpos[tuner]-hdhr_raw_buf_pos[tuner]) : (lastWrite);
+                memcpy(hdhr_out_buf[tuner]+hdhr_out_buf_maxpos[tuner], hdhr_raw_buf[tuner]+hdhr_raw_buf_pos[tuner], lastWrite);
+                hdhr_raw_buf_pos[tuner] += lastWrite;
+#endif
 	        if (lastWrite < 0 && errno != EAGAIN) {
                     fprintf(stderr, "Error %i on read from pipe\n", errno);
 		    goto read_restart_tuner;
@@ -600,7 +635,7 @@ restart_read:
                         hdhr_out_buf_start_offset[tuner] += packetSize;
                         copy_offset -= packetSize;
                     }
-                    fprintf(stderr, "Inserting %lli of null packets at %lli,%lli,%i\n", packetSize, copy_offset, size, hdhr_out_buf_maxpos[tuner]);
+                    fprintf(stderr, "Inserting %lli of null packets at %lli,%lli,%i\n", (long long int)packetSize, (long long int)copy_offset, (long long int)size, hdhr_out_buf_maxpos[tuner]);
 		    while (copy_offset+size > hdhr_out_buf_maxpos[tuner]) {
 			memcpy(hdhr_out_buf[tuner]+hdhr_out_buf_maxpos[tuner], null_packet, NULL_PACKET_SIZE);
 			hdhr_out_buf_maxpos[tuner] += NULL_PACKET_SIZE;
@@ -611,7 +646,7 @@ restart_read:
 	    }
 
 	    /* update wait counter */
-	    if (hdhr_nWaits[tuner] > 50) fprintf(stdout, "(%i,%i,%lli:%lli,%lli,%i): %i,%i,%lli,%i,%i\n", reader, tuner, offset, copy_offset, size, hdhr_nWaits[tuner], hdhr_raw_buf_pos[tuner], hdhr_raw_buf_maxpos[tuner], hdhr_out_buf_start_offset[tuner], hdhr_out_buf_maxpos[tuner], lastWrite);
+	    if (hdhr_nWaits[tuner] > 50) fprintf(stdout, "(%i,%i,%lli:%lli,%lli,%i): %i,%i,%lli,%i,%i\n", reader, tuner, (long long int)offset, (long long int)copy_offset, (long long int)size, hdhr_nWaits[tuner], hdhr_raw_buf_pos[tuner], hdhr_raw_buf_maxpos[tuner], (long long int)(hdhr_out_buf_start_offset[tuner]), hdhr_out_buf_maxpos[tuner], lastWrite);
             if (didSomething)
                 hdhr_nWaits[tuner] = 0;
             else
@@ -629,8 +664,10 @@ restart_read:
 
             /* release mutex and sleep once if we do not */
             pthread_mutex_unlock(&(hdhr_mutex[tuner]));
-	    usleep(TIME_PER_RECV);
-            counter++;
+	    if (!didSomething) {
+                usleep(TIME_PER_RECV);
+                counter++;
+            }
         }
 
 	/* restart tuner if required */
@@ -640,7 +677,7 @@ read_restart_tuner:
 	fprintf(stderr, "Restarting tuner %i...", tuner);
 	cleanupTunerConnection(tuner);
 	counter = 0;
-        if (hdhr_first_data_returned[tuner] == 0) {
+	if (hdhr_first_data_returned[tuner] == 0) {
             fprintf(stdout, "MAX_RECV_WAITS exceeded and no data ever received, returning ETIMEDOUT for reader %i on tuner %i\n", reader, tuner);
             cleanupTuner(tuner);
             pthread_mutex_unlock(&(hdhr_mutex[tuner]));
@@ -695,9 +732,12 @@ int main(int argc, char *argv[]) {
 		    hdhr_reader_offset[i][j] = 0;
 		}
 
+#ifdef USE_TRANSCODE
 		hdhr_transcode_pid[i] = 0;
 		for (j = 0; j < 4; j++)
 		    hdhr_transcode_pipes[i][j] = 0;
+#endif
+
 		hdhr_cur_chnl[i] = -1;
 	}
 
