@@ -7,7 +7,7 @@ hdhrfs.c
 
 Filesystem driver using FUSE. Requires libhdhomerun to build.
 
-gcc -O3 -Wall -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 hdhrfs.c -o hdhrfs `pkg-config fuse --cflags --libs` -I. -L. -lhdhomerun
+gcc -O3 -Wall -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 hdhrfs.c -o hdhrfs 	&#96;pkg-config fuse --cflags --libs&#96; -I. -L. -lhdhomerun
 
 
 Live Minidlna Patches
